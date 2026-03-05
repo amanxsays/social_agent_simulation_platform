@@ -1,5 +1,5 @@
 'use client';
-
+import { useState, useRef, useCallback, useEffect } from 'react';
 import { Agent, Run } from '@/types';
 
 interface RunSummaryProps {
@@ -9,6 +9,60 @@ interface RunSummaryProps {
 }
 
 export default function RunSummary({ run, agents, completedTurns }: RunSummaryProps) {
+  const [copyState, setCopyState] = useState<'idle' | 'copied' | 'error'>('idle');
+  const resetTimerRef = useRef<number | null>(null);
+  useEffect(() => {
+    return () => {
+      if (resetTimerRef.current !== null) {
+        window.clearTimeout(resetTimerRef.current);
+      }
+    };
+  }, []);
+
+  const copyRunId = useCallback(async () => {
+    try {
+      if (navigator?.clipboard?.writeText) {
+        await navigator.clipboard.writeText(run.runId);
+      } else {
+        const textArea = document.createElement('textarea');
+        textArea.value = run.runId;
+        textArea.style.position = 'fixed';
+        textArea.style.left = '-999999px';
+        textArea.style.top = '-999999px';
+        
+        document.body.appendChild(textArea);
+        textArea.focus();
+        textArea.select();
+        
+        const successful = document.execCommand('copy');
+        document.body.removeChild(textArea);
+        
+        if (!successful) {
+          throw new Error('Fallback copy command failed');
+        }
+      }
+      setCopyState('copied');
+      if (resetTimerRef.current !== null) {
+        window.clearTimeout(resetTimerRef.current);
+      }
+      resetTimerRef.current = window.setTimeout(() => {
+        setCopyState('idle');
+      }, 1500);
+
+    } catch (err) {
+      console.error('Failed to copy Run ID:', err);
+      setCopyState('error');
+      
+      if (resetTimerRef.current !== null) {
+        window.clearTimeout(resetTimerRef.current);
+      }
+      
+      resetTimerRef.current = window.setTimeout(() => {
+        setCopyState('idle');
+      }, 1500);
+    }
+  }, [run.runId]);
+
   return (
     <div className="p-6 space-y-6">
       <h2 className="text-xl font-semibold text-beige-900">Run Summary</h2>
@@ -28,7 +82,18 @@ export default function RunSummary({ run, agents, completedTurns }: RunSummaryPr
             <tr>
               <td className="px-4 py-3 text-sm text-beige-800">Run ID</td>
               <td className="px-4 py-3 text-sm text-beige-900 font-mono">
-                {run.runId}
+                <div className="flex items-center gap-2">
+                  <span className="font-mono">{run.runId}</span>
+                  <button
+                    type="button"
+                    onClick={copyRunId}
+                    className="text-accent hover:text-accent-hover text-sm font-medium transition-colors"
+                  >
+                    {copyState === 'idle' && 'Copy'}
+                    {copyState === 'copied' && 'Copied!'}
+                    {copyState === 'error' && 'Failed'}
+                  </button>
+                </div>
               </td>
             </tr>
             <tr>
